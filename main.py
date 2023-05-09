@@ -24,6 +24,7 @@ import youtube_dl
 import os
 import time
 from ResolutionOption import ResolutionOption
+from QDialog import CustomDialog
 os.environ['QT_QPA_PLATFORM_PLUGIN_PATH'] = ".\\platform\\"
 
 pytube.request.default_range_size = 1048576
@@ -49,7 +50,7 @@ class Ui_MainWindow(QWidget):
         self.downloadButton.setGeometry(QtCore.QRect(680, 10, 101, 31))
         self.downloadButton.setObjectName("pushButton")
 
-        self.downloadButton.clicked.connect(self.choise)
+        self.downloadButton.clicked.connect(self.loadVideoInformation)
 
         self.progressBar = QtWidgets.QProgressBar(self.centralwidget)
         self.progressBar.setObjectName("progressBar")
@@ -66,8 +67,8 @@ class Ui_MainWindow(QWidget):
         self.resolution_option = ResolutionOption(self.centralwidget)
         self.resolution_option.setGeometry(QtCore.QRect(10, 60, 772, 340))
 
-        # self.videoPlayer = VideoPlayer(self.centralwidget)
-        # self.videoPlayer.setGeometry(QtCore.QRect(10, 60, 772, 340))
+        self.videoPlayer = VideoPlayer(self.centralwidget)
+        self.videoPlayer.setGeometry(QtCore.QRect(10, 60, 772, 340))
         
         MainWindow.setCentralWidget(self.centralwidget)
         self.statusbar = QtWidgets.QStatusBar(MainWindow)
@@ -141,15 +142,16 @@ class Ui_MainWindow(QWidget):
     def download_from_youtube(self, link):
         print(f'Downloading link: {link}')
         try:
-            youtubeObj = YouTube(link,on_progress_callback=self.on_download_progress)
-            # self.resolution_option.setup(youtubeObj)
-        except RegexMatchError:
+            # youtubeObj = YouTube(link,on_progress_callback=self.on_download_progress)
+            youtubeObj = YouTube(link)
+            self.setUpResOpt(youtubeObj)
+        except Exception as e:
         # Handle the error here
-            print("Invalid YouTube link")
-            return
+            print("")
+            # return
 
-        stream = youtubeObj.streams.get_highest_resolution()
-        stream.download()
+        # stream = youtubeObj.streams.get_highest_resolution()
+        # stream.download()
 
     def on_download_progress(self, stream, chunk, bytes_remaining):
         file_size = stream.filesize
@@ -180,7 +182,45 @@ class Ui_MainWindow(QWidget):
             print("Error downloading" + str(e)) 
             return
 
-    def choise(self):
+    def loadVideoInformation(self):
+        link = self.linkEditTxt.toPlainText()
+        if self.comboBox.currentText() == "Facebook":
+            self.thread = DownloadThread(self.downloadfromFacebook, link)
+            self.thread.progress_updated.connect(self.progressBar.setValue)
+            self.thread.start()
+        elif self.comboBox.currentText() == "Youtube":
+            self.verify_url(link)
+            # self.download_from_youtube(link)
+            # self.thread = DownloadThread(self.download_from_youtube,link)
+            # self.downloader.download_video(link,'D:\Workspace\Python\MediaDownloader')
+
+    def setUpResOpt(self, youtubeObj):
+        streams = youtubeObj.streams.filter(only_video=True)
+        res_list = []
+        for stream in streams:
+            res_list.append(stream.resolution)
+        self.resolution_option.setUpComboBox(res_list)
+        self.resolution_option.setImageHolder(youtubeObj.thumbnail_url)
+        self.resolution_option.setTitle(youtubeObj.title)
+        self.resolution_option.downloadBtn.clicked.connect(self.choice)
+        
+    def verify_url(self, link):
+        print(f'Downloading link: {link}')
+        try:
+            # youtubeObj = YouTube(link,on_progress_callback=self.on_download_progress)
+            youtubeObj = YouTube(link)
+            self.centralwidget.layout().removeWidget(self.)
+            self.setUpResOpt(youtubeObj)
+        except Exception as e:
+        # Handle the error here
+            dlg = QtWidgets.QMessageBox(self)
+            dlg.setWindowTitle("Error")
+            dlg.setText("Invalid link")
+            dlg.setStandardButtons(QtWidgets.QMessageBox.Ok)
+            dlg.setIcon(QtWidgets.QMessageBox.Critical)
+            dlg.exec()
+
+    def choice(self):
         link = self.linkEditTxt.toPlainText()
         if self.comboBox.currentText() == "Facebook":
             self.thread = DownloadThread(self.downloadfromFacebook, link)
@@ -190,7 +230,6 @@ class Ui_MainWindow(QWidget):
             self.download_from_youtube(link)
             # self.thread = DownloadThread(self.download_from_youtube,link)
             # self.downloader.download_video(link,'D:\Workspace\Python\MediaDownloader')
-        
 
 if __name__ == "__main__":
     import sys

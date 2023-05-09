@@ -1,7 +1,9 @@
 from pytube import YouTube
 
-link = "https://www.youtube.com/watch?v=bAbOVCiAOEU"
+link = "https://youtu.be/XgDCYG9su7A"
 yt = YouTube(link)
 streams = yt.streams.filter(only_video=True)
 for stream in streams:
-    print(stream.resolution)
+    if stream.mime_type == "video/mp4":
+        print(stream.resolution)
+print(f'Thumbnail: {yt.thumbnail_url}')
