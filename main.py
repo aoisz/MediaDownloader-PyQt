@@ -18,6 +18,7 @@ from VideoPlayer import *
 from QEditText import *
 from pytube import YouTube
 from pytube.exceptions import RegexMatchError
+from urllib import request
 import pytube.request
 import youtube_dl
 import os
@@ -180,11 +181,14 @@ class Ui_MainWindow(QWidget):
     def loadVideoInformation(self):
         link = self.linkEditTxt.toPlainText()
         if link:
-            self.verify_url(link)
-            self.searchBtn.setDisabled(True)
-            self.linkEditTxt.setDisabled(True)
-            self.comboBox.setDisabled(True)
-            self.progressBar.setValue(0)
+            if self.checkInternetConnection() == True:
+                self.verify_url(link)
+                self.searchBtn.setDisabled(True)
+                self.linkEditTxt.setDisabled(True)
+                self.comboBox.setDisabled(True)
+                self.progressBar.setValue(0)
+            else:
+                self.showMessageBox("Can't connect internet, please check your connection!", "error")
         else:
             self.showMessageBox("Please give a link", "error")
 
@@ -275,6 +279,13 @@ class Ui_MainWindow(QWidget):
         self.linkEditTxt.setEnabled(True)
         self.searchBtn.setEnabled(True)
         self.progressBar.setValue(0)
+
+    def checkInternetConnection(self):
+        try:
+            request.urlopen('https://www.google.com/', timeout=1)
+            return True
+        except request.URLError as err: 
+            return False
 
 if __name__ == "__main__":
     import sys
