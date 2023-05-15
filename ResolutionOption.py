@@ -37,7 +37,13 @@ class ResolutionOption(QWidget):
         self.downloadBtn.setGeometry(QtCore.QRect(320, 120, 111, 31))
         self.downloadBtn.setText("Download")
         self.downloadBtn.setFont(font)
-        self.downloadBtn.setObjectName("pushButton")
+        self.downloadBtn.setObjectName("downloadButton")
+
+        self.backBtn = QtWidgets.QPushButton(self)
+        self.backBtn.setGeometry(QtCore.QRect(320, 160, 111, 31))
+        self.backBtn.setText("Back")
+        self.backBtn.setFont(font)
+        self.backBtn.setObjectName("backButton")
 
         #Add all widget to layout
         #Option panel layout
@@ -46,11 +52,13 @@ class ResolutionOption(QWidget):
         gridLayout.addWidget(self.resLabel, 0, 0)
         gridLayout.addWidget(self.comboBox, 1, 0)
         gridLayout.addWidget(self.downloadBtn, 2, 0)
-        gridLayout.addWidget(QtWidgets.QLabel(""), 3, 0)
+        gridLayout.addWidget(self.backBtn, 3, 0)
+        gridLayout.addWidget(QtWidgets.QLabel(""), 4, 0)
         gridLayout.setColumnStretch(0,1)
         gridLayout.setRowStretch(0, 0)
         gridLayout.setRowStretch(1, 0)
         gridLayout.setRowStretch(2, 0)
+        gridLayout.setRowStretch(3, 0)
         self.option_container.setLayout(gridLayout)
 
         #Video description layout
@@ -69,6 +77,7 @@ class ResolutionOption(QWidget):
 
     def setUpComboBox(self, option_list):
         self.option_list = option_list
+        self.comboBox.clear()
         self.comboBox.addItems(self.option_list)
         self.comboBox.setEditable(False)
 
@@ -79,6 +88,11 @@ class ResolutionOption(QWidget):
         image = QtGui.QImage()
         image.loadFromData(requests.get(link).content)
         self.imageHolder.setPixmap(QtGui.QPixmap(image))
+
+    def resetImageHolder(self):
+        pixmap = QtGui.QPixmap(".\\icon\\image.png")
+        self.imageHolder.setPixmap(pixmap)
+        self.imageHolder.setScaledContents(True)
 
     def setTitle(self, title):
         self.titleLabel.setText(title)

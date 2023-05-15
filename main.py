@@ -19,12 +19,11 @@ from QEditText import *
 from pytube import YouTube
 from pytube.exceptions import RegexMatchError
 import pytube.request
-from downloadThread import *
 import youtube_dl
 import os
 import time
 from ResolutionOption import ResolutionOption
-from QDialog import CustomDialog
+from CustomException import CustomException
 os.environ['QT_QPA_PLATFORM_PLUGIN_PATH'] = ".\\platform\\"
 
 pytube.request.default_range_size = 1048576
@@ -46,11 +45,11 @@ class Ui_MainWindow(QWidget):
         self.linkEditTxt.setGeometry(QtCore.QRect(10, 10, 501, 31))
         self.linkEditTxt.setObjectName("textEdit")
         self.linkEditTxt.setFocus(False)
-        self.downloadButton = QtWidgets.QPushButton(self.centralwidget)
-        self.downloadButton.setGeometry(QtCore.QRect(680, 10, 101, 31))
-        self.downloadButton.setObjectName("pushButton")
+        self.searchBtn = QtWidgets.QPushButton(self.centralwidget)
+        self.searchBtn.setGeometry(QtCore.QRect(680, 10, 101, 31))
+        self.searchBtn.setObjectName("pushButton")
 
-        self.downloadButton.clicked.connect(self.loadVideoInformation)
+        self.searchBtn.clicked.connect(self.loadVideoInformation)
 
         self.progressBar = QtWidgets.QProgressBar(self.centralwidget)
         self.progressBar.setObjectName("progressBar")
@@ -66,6 +65,8 @@ class Ui_MainWindow(QWidget):
 
         self.resolution_option = ResolutionOption(self.centralwidget)
         self.resolution_option.setGeometry(QtCore.QRect(10, 60, 772, 340))
+        self.resolution_option.setVisible(False)
+        self.resolution_option.backBtn.clicked.connect(self.backToVideoPlayer)
 
         self.videoPlayer = VideoPlayer(self.centralwidget)
         self.videoPlayer.setGeometry(QtCore.QRect(10, 60, 772, 340))
@@ -84,8 +85,8 @@ class Ui_MainWindow(QWidget):
         MainWindow.setWindowTitle(_translate("MainWindow", "Media Downloader"))
         MainWindow.setWindowIcon(QtGui.QIcon(
             '.\\icon\\download_frame_icon.png'))
-        self.downloadButton.setText(_translate("MainWindow", "Search"))
-        self.downloadButton.setIcon(QtGui.QIcon('.\\icon\\search.png'))
+        self.searchBtn.setText(_translate("MainWindow", "Search"))
+        self.searchBtn.setIcon(QtGui.QIcon('.\\icon\\search.png'))
 
         comboBoxList = ["Youtube", "Facebook"]       
         self.comboBox.addItems(comboBoxList)
@@ -97,139 +98,183 @@ class Ui_MainWindow(QWidget):
         iconfb = QtGui.QIcon('.\\icon\\facebook.png')
         self.comboBox.setItemIcon(1,iconfb)
 
-
-        # self.thread = DownloadThread(self.download_from_youtube)
-
     def setPlaceHolder(self):
         if (self.linkEditTxt.toPlainText() == ""):
             self.linkEditTxt.setText("Paste link here")
             self.linkEditTxt.setStyleSheet("QTextEdit {color:black}")
-    
-       
-# # #cái gốc
-#     def download_from_youtube(self, link):
-#         link = self.linkEditTxt.toPlainText()
-#         print("Download link: " + link) # Print the link to see if it's correct
-#         try:
-#             youtubeObj = YouTube(link)
-#         except RegexMatchError:
-#         # Handle the error here
-#             print("Invalid YouTube link")
-#             return
-
-#         youtubeObj = youtubeObj.streams.get_highest_resolution()
-#     # Start the download
-#         try:
-#            # Estimate the total duration based on the file size
-#             total_duration = youtubeObj.filesize / 1000000 # in MB
-
-#         # Start the download
-#             start_time = time.time()
-#             youtubeObj.download()
-#             end_time = time.time()
-
-#         # Emit the progress through the signal
-#             elapsed_duration = end_time - start_time
-#             elapsed_percent = elapsed_duration / total_duration * 100
-#             self.progress_updated.emit(elapsed_percent)
-#             for i in range(0, total_duration):
-#                 self.progressBar.setValue(i+1)
-
-#         except Exception as e:
-#             print("Error downloading: " + str(e))
-#         return
 
     def download_from_youtube(self, link):
         print(f'Downloading link: {link}')
         try:
-            # youtubeObj = YouTube(link,on_progress_callback=self.on_download_progress)
-            youtubeObj = YouTube(link)
-            self.setUpResOpt(youtubeObj)
+            youtubeObj = YouTube(link, on_progress_callback=self.on_download_progress, on_complete_callback=self.on_finish)
+            folder_path = QFileDialog.getExistingDirectory(self, "Select Folder to Save the Video")
+            if folder_path:
+                currentResolution = self.resolution_option.getResOption()
+                temp = youtubeObj.streams.filter(mime_type="video/mp4", resolution=currentResolution)
+                stream = temp.first()
+                stream.download(folder_path)
+            else:
+                self.showMessageBox("Please select a folder", "error")
         except Exception as e:
-        # Handle the error here
             print("")
-            # return
-
-        # stream = youtubeObj.streams.get_highest_resolution()
-        # stream.download()
 
     def on_download_progress(self, stream, chunk, bytes_remaining):
         file_size = stream.filesize
         bytes_received = file_size - bytes_remaining
         percentage = int((bytes_received/file_size)*100)
+        print(percentage)
         self.progressBar.setValue(percentage)
+    
+    def on_finish(self, stream, file_path):
+        self.showMessageBox("Download Successful", "success")
+        self.backToVideoPlayer()
     
     def downloadfromFacebook(self,link):
         print(link) # Print the link to see if it's correct
-        try:
-            with youtube_dl.YoutubeDL({'outtmpl': '%(title)s.%(ext)s'}) as ydl:                
-                def progress_hook(progress):
-                    if progress['status'] == 'downloading':
-                    # Get the total file size in bytes
-                        total_size = int(progress['total_bytes'])
-                    # Get the downloaded size in bytes
-                        downloaded_size = int(progress['downloaded_bytes'])
-                    # Calculate the download progress as a percentage
-                        progress_percent = int(downloaded_size / total_size * 100)
-                    # Emit the progress_updated signal with the progress percentage
-                        self.thread.update_progress(progress_percent)
-                        self.progressBar.update()
+        quality = self.resolution_option.getCurrentComboBoxItem()
+        folder_path = QFileDialog.getExistingDirectory(self, "Select Folder to Save the Video")
+        if folder_path:
+            try:
+                ydl_opts = {
+                    'outtmpl': f'{folder_path}/%(title)s.%(ext)s',
+                    'format': self.get_selected_quality(quality),
+                    'progress_hooks': [self.facebook_download_progress_hook]
+                }
+                with youtube_dl.YoutubeDL(ydl_opts) as ydl:
+                    ydl.download([link])
+            except Exception as e:
+                print(f"Error: {e}")
+        else:
+            self.showMessageBox("Please select a folder", "error")
 
-                ydl.params['progress_hooks'] = [progress_hook]
-                # ydl.params['progress_hooks'] = [self.my_hook]
-                ydl.download([link])
-        except Exception as e:
-            print("Error downloading" + str(e)) 
-            return
+        
+    def update_progress(self, progress):
+        self.progressBar.setValue(progress)
+    
+    def get_selected_quality(self, quality):
+        """Returns the format code for the selected quality"""
+        if quality == "Highest resolution":
+            return 'bestvideo[height<=?1080][fps<=?30][vcodec!=?av01][vcodec!=?vp9.2][vcodec!=?vp9.3][vcodec!=?vp9.4][vcodec!=?vp9.5][vcodec!=?vp9.6]+bestaudio/best'
+        elif quality == "1080p":
+            return 'bestvideo[height<=1080][fps<=30][vcodec!=av01][vcodec!=vp9.2][vcodec!=vp9.3][vcodec!=vp9.4][vcodec!=vp9.5][vcodec!=vp9.6]+bestaudio/best'
+        elif quality == "720p":
+            return 'bestvideo[height<=720][fps<=30][vcodec!=av01][vcodec!=vp9.2][vcodec!=vp9.3][vcodec!=vp9.4][vcodec!=vp9.5][vcodec!=vp9.6]+bestaudio/best'
+        elif quality == "480p":
+            return 'bestvideo[height<=480][fps<=30][vcodec!=av01][vcodec!=vp9.2][vcodec!=vp9.3][vcodec!=vp9.4][vcodec!=vp9.5][vcodec!=vp9.6]+bestaudio/best'
+        elif quality == "360p":
+            return 'bestvideo[height<=360][fps<=30][vcodec!=av01][vcodec!=vp9.2][vcodec!=vp9.3][vcodec!=vp9.4][vcodec!=vp9.5][vcodec!=vp9.6]+bestaudio/best'
+        elif quality == "240p":
+            return 'bestvideo[height<=240][fps<=30][vcodec!=av01][vcodec!=vp9.2][vcodec!=vp9.3][vcodec!=vp9.4][vcodec!=vp9.5][vcodec!=vp9.6]+bestaudio/best'
+        elif quality == "144p":
+            return 'bestvideo[height<=144][fps<=30][vcodec!=av01][vcodec!=vp9.2][vcodec!=vp9.3][vcodec!=vp9.4][vcodec!=vp9.5][vcodec!=vp9.6]+bestaudio/best'
+        else:
+            return 'best'       
+
+    def facebook_download_progress_hook(self, d):
+        if d['status'] == 'downloading':
+            self.update_progress(int(round(float(d['downloaded_bytes'])/float(d['total_bytes'])*100,1)))
+        elif d['status'] == 'finished':
+            self.showMessageBox("Download Successful", "success")
+            self.backToVideoPlayer()
 
     def loadVideoInformation(self):
         link = self.linkEditTxt.toPlainText()
-        if self.comboBox.currentText() == "Facebook":
-            self.thread = DownloadThread(self.downloadfromFacebook, link)
-            self.thread.progress_updated.connect(self.progressBar.setValue)
-            self.thread.start()
-        elif self.comboBox.currentText() == "Youtube":
+        if link:
             self.verify_url(link)
-            # self.download_from_youtube(link)
-            # self.thread = DownloadThread(self.download_from_youtube,link)
-            # self.downloader.download_video(link,'D:\Workspace\Python\MediaDownloader')
+            self.searchBtn.setDisabled(True)
+            self.linkEditTxt.setDisabled(True)
+            self.comboBox.setDisabled(True)
+            self.progressBar.setValue(0)
+        else:
+            self.showMessageBox("Please give a link", "error")
 
-    def setUpResOpt(self, youtubeObj):
-        streams = youtubeObj.streams.filter(only_video=True)
+    def set_up_youtube_resolution_option(self, youtubeObj):
+        streams = youtubeObj.streams.filter(only_video="video")
         res_list = []
         for stream in streams:
-            res_list.append(stream.resolution)
+            if stream.mime_type == "video/mp4":
+                res_list.append(stream.resolution)
+        print(res_list)
         self.resolution_option.setUpComboBox(res_list)
         self.resolution_option.setImageHolder(youtubeObj.thumbnail_url)
         self.resolution_option.setTitle(youtubeObj.title)
         self.resolution_option.downloadBtn.clicked.connect(self.choice)
-        
+
+    def set_up_facebook_resolution_option(self, link):
+        with youtube_dl.YoutubeDL({'outtmpl': '%(title)s.%(ext)s'}) as ydl:
+            info_dict = ydl.extract_info(link, download=False)
+            title = info_dict.get('title', None)
+        res_list = ['1080p', '720p', '480p', '360p', '240p', '124p']
+        print(title)
+        self.resolution_option.setUpComboBox(res_list)
+        self.resolution_option.setTitle("No title")
+        self.resolution_option.resetImageHolder()
+        self.resolution_option.downloadBtn.clicked.connect(self.choice)
+
     def verify_url(self, link):
         print(f'Downloading link: {link}')
         try:
-            # youtubeObj = YouTube(link,on_progress_callback=self.on_download_progress)
-            youtubeObj = YouTube(link)
-            self.centralwidget.layout().removeWidget(self.)
-            self.setUpResOpt(youtubeObj)
+            if self.comboBox.currentText() == "Youtube":
+                youtubeObj = YouTube(link)
+                self.resolution_option.setVisible(True)
+                self.videoPlayer.setVisible(False)
+                self.set_up_youtube_resolution_option(youtubeObj)
+            elif self.comboBox.currentText() == "Facebook":
+                result = self.check_facebook_link(link)
+                if result == True:
+                    self.resolution_option.setVisible(True)
+                    self.videoPlayer.setVisible(False)
+                    self.set_up_facebook_resolution_option(link)
+                else:
+                    self.invalid_facebook_link()
         except Exception as e:
         # Handle the error here
-            dlg = QtWidgets.QMessageBox(self)
-            dlg.setWindowTitle("Error")
-            dlg.setText("Invalid link")
-            dlg.setStandardButtons(QtWidgets.QMessageBox.Ok)
-            dlg.setIcon(QtWidgets.QMessageBox.Critical)
-            dlg.exec()
+            self.showMessageBox("Invalid URL", "error")
+            print(e)
 
     def choice(self):
         link = self.linkEditTxt.toPlainText()
         if self.comboBox.currentText() == "Facebook":
-            self.thread = DownloadThread(self.downloadfromFacebook, link)
-            self.thread.progress_updated.connect(self.progressBar.setValue)
-            self.thread.start()
+            self.downloadfromFacebook(link)
         elif self.comboBox.currentText() == "Youtube":
             self.download_from_youtube(link)
-            # self.thread = DownloadThread(self.download_from_youtube,link)
-            # self.downloader.download_video(link,'D:\Workspace\Python\MediaDownloader')
+
+    def check_facebook_link(self, url):
+        extractors = youtube_dl.extractor.gen_extractors()
+        for e in extractors:
+            if e.suitable(url) and e.IE_NAME != 'generic':
+                return True
+        if "https://fb.watch/" in url:
+            return True
+        return False
+        
+    def invalid_facebook_link():
+        raise CustomException("Invalid Facebook Video Link")
+    
+    def showMessageBox(self, message, message_type):
+            dlg = QtWidgets.QMessageBox(self)
+            if(message_type == "error"):
+                dlg.setWindowTitle("Error")
+                dlg.setStandardButtons(QtWidgets.QMessageBox.Ok)
+                dlg.setIcon(QtWidgets.QMessageBox.Critical)
+            elif(message_type == "warning"):
+                dlg.setWindowTitle("Warning")
+                dlg.setStandardButtons(QtWidgets.QMessageBox.Ok)
+                dlg.setIcon(QtWidgets.QMessageBox.Warning)
+            elif(message_type == "success"):
+                dlg.setWindowTitle("Success")
+                dlg.setStandardButtons(QtWidgets.QMessageBox.Ok)
+                dlg.setIcon(QtWidgets.QMessageBox.Information)
+            dlg.setText(message)
+            dlg.exec()
+
+    def backToVideoPlayer(self):
+        self.videoPlayer.setVisible(True)
+        self.resolution_option.setVisible(False)
+        self.comboBox.setEnabled(True)
+        self.linkEditTxt.setEnabled(True)
+        self.searchBtn.setEnabled(True)
+        self.progressBar.setValue(0)
 
 if __name__ == "__main__":
     import sys
